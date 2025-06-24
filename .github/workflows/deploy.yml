@@ -9,7 +9,7 @@ on:
 
 jobs:
   update-content:
-    runs-on: [self-hosted, linux]
+    runs-on: self-hosted
 
     steps:
       - name: Update index.html on server
