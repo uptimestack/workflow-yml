@@ -1,0 +1,19 @@
+name: Update Flask Content
+
+on:
+  workflow_call:
+    inputs:
+      message:
+        required: true
+        type: string
+
+jobs:
+  update-content:
+    runs-on: [self-hosted, linux]
+
+    steps:
+      - name: Update index.html on server
+        run: |
+          echo "Updating HTML with message: ${{ inputs.message }}"
+          sed -i 's|<h1>.*</h1>|<h1>${{ inputs.message }}</h1>|' /home/subhan.asad/flask_app/templates/index.html
+
