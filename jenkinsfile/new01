@@ -1,0 +1,24 @@
+@Library('global_libraries@openjdk-integration')_
+node ('master'){
+    configuration{
+        build_tasks = "adsBuild"
+        project_key = "advance-salary"                     
+        project_name = "Advance-Salary"           
+        sources = "src/main/java/"                   
+        build_breaker = "false"                                
+        exclusions = "**/generated/**,**/payload/**,**/config/**,**/persistance/**"
+        binaries = "build/classes/java/"           
+        jacoco_report_path = "build/reports/jacoco/test/jacocoTestReport.xml"
+        application_namespace = "advance-salary-dev"
+        application_name = "advance-salary"
+        deploy = "true"
+        build_tool = "gradle"
+		flyway_migration = "true"
+        flyway_task = "migrate"
+        flyway_application_name = "advance-salary"
+        app_release_version = "1.0.0"
+		gradle_version = "8.10.2"
+        gitlabBranch ="develop"
+		build_env = "dev"
+    }
+}
