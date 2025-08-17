@@ -1,0 +1,105 @@
+name: PMS-Flyway
+
+on:
+  workflow_dispatch:
+    inputs:
+      VERSION:
+        description: "App Version"
+        required: true
+        type: string
+      COMMIT_NUMBER:
+        description: "Commit Hash"
+        required: true
+        type: string
+      FlywayTask:
+        description: 'Select Flyway Task'
+        required: true
+        type: choice
+        options:
+          - Info
+          - Baseline
+          - DryRun
+          - Validate
+          - Migrate
+          - Undo
+          - Done
+
+env:
+  APPLICATION_NAME: "pms"
+  WORKSPACE: ${{ github.workspace }}
+  flyway_home: "/opt/flyway-6.0.8"
+  no_proxy: "github.adib.co.ae,blob.core.windows.net"
+  NODE_EXTRA_CA_CERTS: /home/flyway/rootCA.crt
+
+
+jobs:
+  Flyway-Migration:
+    runs-on: "Flyway"
+      
+    steps:
+      - name: Import Secrets from Vault
+        uses: ADIB-DevOps/vault-action@v2
+        with:
+          url: https://azvault.adib.co.ae/
+          method: token
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: |
+            kv/data/flyway-license licenseKey | licenseKey ;
+            kv/data/database/pms/uat url | db_url ;
+            kv/data/database/pms/uat username | db_username ;
+            kv/data/database/pms/uat password | db_password
+          tlsSkipVerify: true
+      
+      - name: Clean workspace 
+        run: |
+          rm -rf ./* .[^.] .??*
+        
+      - name: Download DB scripts from Github Packages
+        run: |
+          TARGET_PATH="${{ env.WORKSPACE }}/"
+          echo "Downloading zip file"
+          curl -L --insecure -u "${{ secrets.USER_GITHUB }}:${{ secrets.TOKEN_GITHUB }}" \
+           -o $TARGET_PATH$(basename ${{ inputs.VERSION }}-${{ inputs.COMMIT_NUMBER }}.zip) \
+           "https://github.adib.co.ae/_registry/maven/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ env.APPLICATION_NAME }}/${{ inputs.VERSION }}-${{ inputs.COMMIT_NUMBER }}/$(basename ${{ inputs.VERSION }}-${{ inputs.COMMIT_NUMBER }}.zip)"
+          
+          echo "Zip downloaded"
+
+      - name: Unzip release artifact
+        run: |
+          mkdir -p release
+          unzip "${{ inputs.VERSION }}-${{ inputs.COMMIT_NUMBER }}.zip" -d release 
+
+      - name: Set Flyway Goals
+        id: flyway
+        run: |
+          case "${{ inputs.FlywayTask }}" in
+            Info) echo "goals=info" >> $GITHUB_OUTPUT ;;
+            Baseline) echo "goals=baseline info" >> $GITHUB_OUTPUT ;;
+            DryRun) echo "goals=migrate info -dryRunOutput=dryrun.sql" >> $GITHUB_OUTPUT ;;
+            Validate) echo "goals=repair validate info" >> $GITHUB_OUTPUT ;;
+            Migrate) echo "goals=migrate info" >> $GITHUB_OUTPUT ;;
+            Undo) echo "goals=undo info" >> $GITHUB_OUTPUT ;;
+            Done) echo "goals=Done" >> $GITHUB_OUTPUT ;;
+            *) echo "goals=info" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Execute Flyway
+        if: steps.flyway.outputs.goals != 'Done'
+        run: |  
+          echo "Running Flyway goals: ${{ steps.flyway.outputs.goals }}"
+          flyway -enterprise \
+          -locations="filesystem:${{ env.WORKSPACE }}/release/" \
+          -licenseKey=$licenseKey \
+          -url=$db_url \
+          -user=$db_username \
+          -password=$db_password \
+          ${{ steps.flyway.outputs.goals }}
+
+      - name: Archive dryrun.sql (if DryRun)
+        if: inputs.FlywayTask == 'DryRun'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dryrun
+          path: dryrun.sql
+
+
